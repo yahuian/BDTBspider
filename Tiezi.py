@@ -1,6 +1,7 @@
 import requests
 from lxml import etree
 import re
+import csv
 
 class Tiezi:
     '''帖子爬虫，负责爬每个贴子的数据'''
@@ -31,7 +32,7 @@ class Tiezi:
     def getFloorBaseInfo(self,div):
         '''获取每层楼的基本数据'''
         userName=div.xpath('./div[2]/ul/li[@class="d_name"]/a//text()')[0] # 发帖人
-        text=div.xpath('./div[3]/div[1]/cc/div[2]//text()')[0] # 每层楼的内容
+        text=div.xpath('./div[3]/div[1]/cc/div[2]//text()') # 每层楼的内容
         data_field=div.xpath('./@data-field')[0] # 该楼层的相关信息都在div标签的data-field属性里面
         byte=data_field.encode('UTF-8') # 将lxml.etree._ElementUnicodeResult类型转为为bytes类型
         string=str(byte,'UTF-8') # 将 bytes类型转为string
@@ -82,37 +83,97 @@ class Tiezi:
         r_lzl=requests.get(lzlUrl)
         root=etree.HTML(r_lzl.content.decode('UTF-8'))
 
+        infoList=[]
+
         lis=root.xpath('//li') # 每一个li都代表一条评论
         for i in range(0,len(lis)-1):
-            r_text=lis[i].xpath('./div[@class="lzl_cnt"]//text()') # 回复的评论信息
-            print(r_text)
-        return True
+            r_text=lis[i].xpath('./div[@class="lzl_cnt"]')[0].xpath('string(.)').replace(' ','') # 回复的评论信息
 
+            r_list=r_text.split(':',1)
+            user1=r_list[0]
+            
+            # 提取时间
+            time_r='[0-9]{4}-[0-9]*-[0-9]*:[0-9]*回复'
+            time_c=re.compile(time_r)
+            time=time_c.findall(r_list[1])[0] # 此时的格式位'2019-3-2319:04回复'
+            time1=time[0:-2] # 切除'回复'
+            date=time1[0:-5]+' '+time1[-5:] # 格式化发帖时间
 
+            r_text1=r_list[1].replace(time,'') # 该串中只有评论内容或者是user2+评论内容
 
-
-
-
+            if(r_text1[0:2]=='回复'):
+                s=r_text1.split(':',1)
+                try:
+                    user2=s[0][2:]
+                    context=s[1]
+                except IndexError:
+                    user2=''
+                    context=r_text1
+            else:
+                user2=''
+                context=r_text1
+            
+            tempDir={
+                'user1':user1,
+                'user2':user2,
+                'context':context,
+                'date':date
+            }
+            infoList.append(tempDir)
+            
+        return infoList
 
 # main函数
-page = Tiezi('6072330562',1) # 初始化一个帖子
-baseInfo=page.getBaseInfo() # 帖子基本信息
+pre = Tiezi('5214401882',1) # 初始化一个帖子
+preInfo=pre.getBaseInfo() # 帖子基本信息
 
-print('标题：',baseInfo['title'])
-print('回复数：',baseInfo['responseNum'])
-print('页数：',baseInfo['pages'])
-#print('楼层：',baseInfo['divs'],len(baseInfo['divs']),"个")
+for pn in range(1,int(preInfo['pages'])+1):
+    page=Tiezi('5214401882',pn)
+    baseInfo=page.getBaseInfo()
 
-for e in baseInfo['divs']:
-    FloorBaseInfo=page.getFloorBaseInfo(e) # 每层楼的基本信息
-    print('用户名：',FloorBaseInfo['userName'])
-    print('内容：',FloorBaseInfo['text'])
-    print('时间：',FloorBaseInfo['date'])
-    print('楼层：',FloorBaseInfo['post_no'])
-    
-    # 楼中楼
-    if FloorBaseInfo['lzlPage']!=0:
-        for i in range(1,FloorBaseInfo['lzlPage']+1):
-            lzlInfo=page.getLZLInfor(FloorBaseInfo['post_id'],i)
+    '''
+    print('标题：',baseInfo['title'])
+    print('回复数：',baseInfo['responseNum'])
+    print('页数：',baseInfo['pages'])
+    #print('楼层：',baseInfo['divs'],len(baseInfo['divs']),"个")
+    '''
 
-    print('--------------------------------')
+    # 写入csv文件
+    infoDir={'user1':'','user2':'','context':'','date':''}
+    fileName=preInfo['title'].replace('.','')
+    with open(fileName+'.csv','a',newline='',encoding='utf-8-sig') as csvfile:
+        w=csv.DictWriter(csvfile,fieldnames=infoDir)
+        w.writeheader()
+
+        for e in baseInfo['divs']:
+            FloorBaseInfo=page.getFloorBaseInfo(e) # 每层楼的基本信息
+
+            #print('用户名：',FloorBaseInfo['userName'])
+            #print('内容：',FloorBaseInfo['text'])
+            #print('时间：',FloorBaseInfo['date'])
+            #print('楼层：',FloorBaseInfo['post_no'])
+            
+            w.writerow({
+                'user1':FloorBaseInfo['userName'],
+                'user2':'',
+                'context':FloorBaseInfo['text'],
+                'date':FloorBaseInfo['date']
+            })
+
+            # 楼中楼
+            if FloorBaseInfo['lzlPage']!=0:
+                for i in range(1,FloorBaseInfo['lzlPage']+1):
+                    lzlInfo=page.getLZLInfor(FloorBaseInfo['post_id'],i)
+                    for j in lzlInfo:
+                        w.writerow({
+                            'user1':j['user1'],
+                            'user2':j['user2'],
+                            'context':j['context'],
+                            'date':j['date']
+                        })
+            w.writerow({})
+            print(FloorBaseInfo['post_no'],'楼成功写入文件') # 每层楼
+
+    print(pn,'页成功写入文件') # 帖子的某页
+
+print(fileName,'成功写入文件') # 整个帖子
