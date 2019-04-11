@@ -1,15 +1,16 @@
 from GetTieba import Tieba
 from GetTiezi import Tiezi
 import csv
+import os
 
 # 用户输入要爬的吧名即可
-tieba=Tieba('北京工业大学吧') #注意不要输入'吧'字
+tieba=Tieba('北京工业大学') #注意不要输入'吧'字
 
 #---------------------------------------------------------#
 baseInfo=tieba.getBaseInfo()
 print('吧名:',tieba.name)
 print('尾页id:',baseInfo['pn'])
-'''
+
 # 将整个吧的帖子信息写入csv文件
 infoDir={'回复数':'','标题':'','Tid':''}
 with open(tieba.name+'吧.csv','a',newline='',encoding='utf-8-sig') as csvfile:
@@ -26,14 +27,15 @@ with open(tieba.name+'吧.csv','a',newline='',encoding='utf-8-sig') as csvfile:
         print('...')
         w.writerow({})
         print(i,' 成功写入文件')
-'''
+
 
 # 从csv文件中读取tid，爬取每个帖子的具体信息
+DstDir = os.getcwd()+"/tiezi/"
 with open(tieba.name+'.csv','r',encoding='utf-8-sig') as csvfile:
     reader = csv.reader(csvfile)
     column2 = [row[2] for row in reader]
     #csv文件的第一行是属性名Tid,所以range从第二行开始
-    for i in range(406,406): # 不要一次性遍历所有的tid,可以尝试每次爬几十个帖
+    for i in range(2964,3000): # 不要一次性遍历所有的tid,可以尝试每次爬几十个帖
         if(column2[i]!=''):
             tid=column2[i]
     
@@ -53,8 +55,8 @@ with open(tieba.name+'.csv','r',encoding='utf-8-sig') as csvfile:
 
             # 写入csv文件
             infoDir={'user1':'','user2':'','context':'','date':''}
-            fileName=preInfo['title'].replace('.','')
-            with open(fileName+'.csv','a',newline='',encoding='utf-8-sig') as csvfile:
+            fileName=preInfo['title'].replace('.','').replace('/','')
+            with open(DstDir+fileName+'.csv','a',newline='',encoding='utf-8-sig') as csvfile:
                 w=csv.DictWriter(csvfile,fieldnames=infoDir)
                 w.writeheader()
 
